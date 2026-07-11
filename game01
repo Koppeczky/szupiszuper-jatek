@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Kockavadász – Szupiszuper demo játék</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --red:#D01012; --yellow:#F5C518; --blue:#0057C8; --green:#2E9E44;
+    --ink:#1B1B2F; --paper:#FDF6E3; --sky1:#8FD3F4; --sky2:#DCF3FF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:'Fredoka',system-ui,sans-serif;
+    background:linear-gradient(180deg,var(--sky1) 0%,var(--sky2) 70%,#BEE9C9 100%);
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;color:var(--ink);
+    user-select:none;-webkit-user-select:none;touch-action:none;
+  }
+  #wrap{position:relative;width:100%;height:100%;max-width:560px;max-height:820px;display:flex;flex-direction:column}
+  /* --- HUD felül, kocka-panelek --- */
+  #hud{
+    display:flex;justify-content:space-between;align-items:stretch;
+    gap:8px;padding:10px 12px 4px;
+  }
+  .panel{
+    position:relative;background:#fff;border:3px solid var(--ink);
+    border-radius:10px;padding:12px 14px 6px;min-width:86px;text-align:center;
+    box-shadow:0 4px 0 var(--ink);
+  }
+  .panel::before,.panel::after{ /* LEGO bütykök a panel tetején */
+    content:"";position:absolute;top:-9px;width:16px;height:9px;
+    background:inherit;border:3px solid var(--ink);border-bottom:none;
+    border-radius:5px 5px 0 0;
+  }
+  .panel::before{left:14px}
+  .panel::after{right:14px}
+  .panel .lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.65}
+  .panel .val{font-size:24px;font-weight:700;line-height:1.1}
+  #comboPanel{background:var(--yellow)}
+  #livesPanel{background:#FFD9D9}
+  #livesPanel .val{letter-spacing:2px}
+  /* --- Játéktér --- */
+  #stage{flex:1;position:relative;margin:14px 12px 12px}
+  canvas{
+    width:100%;height:100%;display:block;
+    background:transparent;border:3px solid var(--ink);border-radius:14px;
+    box-shadow:0 6px 0 var(--ink);
+    background:
+      radial-gradient(circle at 20% 15%, rgba(255,255,255,.55) 0 40px, transparent 41px),
+      radial-gradient(circle at 75% 8%, rgba(255,255,255,.45) 0 55px, transparent 56px),
+      linear-gradient(180deg,#EAF7FF 0%,#F6FBFF 78%,#CDEBD3 78%,#B9E3C2 100%);
+  }
+  /* --- Overlay képernyők --- */
+  .overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:16px;text-align:center;
+    background:rgba(253,246,227,.92);border-radius:14px;padding:24px;
+    backdrop-filter:blur(2px);
+  }
+  .overlay.hidden{display:none}
+  h1{font-size:clamp(30px,8vw,44px);font-weight:700;line-height:1.05}
+  h1 .b{display:inline-block;padding:2px 10px;border-radius:8px;border:3px solid var(--ink);box-shadow:0 4px 0 var(--ink);margin:2px}
+  h1 .r{background:var(--red);color:#fff}
+  h1 .y{background:var(--yellow)}
+  h1 .g{background:var(--green);color:#fff}
+  h1 .bl{background:var(--blue);color:#fff}
+  .sub{font-size:16px;font-weight:500;max-width:340px;line-height:1.45}
+  .sub b{font-weight:700}
+  .btn{
+    font-family:inherit;font-size:20px;font-weight:700;cursor:pointer;
+    background:var(--red);color:#fff;border:3px solid var(--ink);
+    border-radius:12px;padding:14px 34px;position:relative;
+    box-shadow:0 5px 0 var(--ink);transition:transform .08s,box-shadow .08s;
+  }
+  .btn:active{transform:translateY(4px);box-shadow:0 1px 0 var(--ink)}
+  .btn.alt{background:var(--blue);font-size:15px;padding:10px 22px}
+  .btn:focus-visible{outline:3px dashed var(--blue);outline-offset:3px}
+  #finalScore{font-size:52px;font-weight:700;color:var(--red)}
+  #bestLine{font-size:14px;font-weight:600;opacity:.7}
+  .hint{font-size:12px;opacity:.55;font-weight:500}
+  #muteBtn{
+    position:absolute;top:10px;right:10px;z-index:5;
+    width:42px;height:42px;font-size:19px;border-radius:10px;
+    background:#fff;border:3px solid var(--ink);box-shadow:0 3px 0 var(--ink);cursor:pointer;
+  }
+  #muteBtn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+  @media (prefers-reduced-motion: reduce){
+    .btn,.panel{transition:none}
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="panel"><div class="lbl">Pont</div><div class="val" id="score">0</div></div>
+    <div class="panel" id="comboPanel"><div class="lbl">Kombó</div><div class="val" id="combo">×1</div></div>
+    <div class="panel" id="livesPanel"><div class="lbl">Élet</div><div class="val" id="lives">🧱🧱🧱</div></div>
+  </div>
+
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <button id="muteBtn" aria-label="Hang ki/be">🔊</button>
+
+    <div class="overlay" id="startScreen">
+      <h1><span class="b r">K</span><span class="b y">O</span><span class="b bl">C</span><span class="b g">K</span><span class="b r">A</span><br>VADÁSZ</h1>
+      <p class="sub">Kapd el a hulló kockákat az alaplappal! Az <b>arany kocka</b> extra pontot ér, de vigyázz: <b>3 elejtett kocka</b> után vége a játéknak.</p>
+      <button class="btn" id="startBtn">Játék indítása</button>
+      <p class="hint">Irányítás: nyilak / egér / ujj</p>
+    </div>
+
+    <div class="overlay hidden" id="overScreen">
+      <h1>Vége a<br>játéknak!</h1>
+      <div id="finalScore">0</div>
+      <div id="bestLine"></div>
+      <button class="btn" id="againBtn">Újra játszom</button>
+    </div>
+
+    <div class="overlay hidden" id="pauseScreen">
+      <h1>Szünet</h1>
+      <button class="btn alt" id="resumeBtn">Folytatás</button>
+      <p class="hint">A Szóköz billentyűvel is szüneteltethetsz</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- Iframe paraméterek (teszteléshez) ----------
+  // Példa: kockavadasz.html?speed=1.4&lives=5&mute=1
+  const qp = new URLSearchParams(location.search);
+  const P = {
+    speed: Math.min(3, Math.max(.5, parseFloat(qp.get('speed')) || 1)),
+    lives: Math.min(9, Math.max(1, parseInt(qp.get('lives')) || 3)),
+    mute:  qp.get('mute') === '1'
+  };
+
+  // ---------- Alap ----------
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  let W, H, DPR;
+
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    const r = cv.getBoundingClientRect();
+    W = r.width; H = r.height;
+    cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Hang (WebAudio, fájl nélkül) ----------
+  let muted = P.mute, ac = null;
+  function beep(freq, dur=.09, type='square', vol=.15){
+    if (muted) return;
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + dur);
+    o.connect(g).connect(ac.destination);
+    o.start(); o.stop(ac.currentTime + dur);
+  }
+  const muteBtn = $('muteBtn');
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+  muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+  });
+
+  // ---------- Játékállapot ----------
+  const COLORS = ['#D01012','#F5C518','#0057C8','#2E9E44'];
+  const GOLD = '#E8A300';
+  let bricks=[], parts=[], paddle, score, combo, lives, running=false, paused=false;
+  let spawnT=0, spawnGap, fallSpeed, lastT=0, best=0;
+
+  function reset(){
+    bricks=[]; parts=[]; score=0; combo=1; lives=P.lives;
+    spawnGap=1300; fallSpeed=110*P.speed; spawnT=600;
+    paddle={x:W/2, w:Math.max(84, W*.2), h:20};
+    updateHUD();
+  }
+
+  function updateHUD(){
+    $('score').textContent = score;
+    $('combo').textContent = '×'+combo;
+    $('lives').textContent = '🧱'.repeat(lives) || '–';
+  }
+
+  // ---------- Rajz: LEGO kocka bütykökkel ----------
+  function drawBrick(x,y,w,h,color,angle=0){
+    ctx.save();
+    ctx.translate(x,y); ctx.rotate(angle);
+    ctx.lineWidth=2.5; ctx.strokeStyle='#1B1B2F';
+    ctx.fillStyle=color;
+    rr(-w/2,-h/2,w,h,4); ctx.fill(); ctx.stroke();
+    // fény
+    ctx.fillStyle='rgba(255,255,255,.28)';
+    rr(-w/2+3,-h/2+3,w-6,h*.32,3); ctx.fill();
+    // bütykök
+    const n = w>70 ? 3 : 2, sw=w/(n+1);
+    for(let i=1;i<=n;i++){
+      ctx.fillStyle=color;
+      rr(-w/2+i*sw-7,-h/2-8,14,8,3); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function rr(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function drawPaddle(){
+    const {x,w,h}=paddle, y=H-38;
+    ctx.lineWidth=2.5; ctx.strokeStyle='#1B1B2F';
+    ctx.fillStyle='#2E9E44';
+    rr(x-w/2,y,w,h,5); ctx.fill(); ctx.stroke();
+    const n=Math.floor(w/22);
+    for(let i=0;i<n;i++){
+      const bx=x-w/2+(i+.5)*(w/n);
+      ctx.fillStyle='#2E9E44';
+      rr(bx-6,y-7,12,7,3); ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // ---------- Részecskék (elkapás-effekt) ----------
+  function burst(x,y,color){
+    for(let i=0;i<10;i++){
+      parts.push({x,y,vx:(Math.random()-.5)*260,vy:-Math.random()*220-40,
+        life:.55,c:color,s:4+Math.random()*4});
+    }
+  }
+
+  // ---------- Spawn ----------
+  function spawn(){
+    const gold = Math.random()<.08;
+    const w = 44+Math.random()*28;
+    bricks.push({
+      x: 30+Math.random()*(W-60), y:-30,
+      w, h:w*.55,
+      c: gold?GOLD:COLORS[Math.random()*COLORS.length|0],
+      gold, wob:Math.random()*Math.PI*2,
+      v: fallSpeed*(0.85+Math.random()*.35)
+    });
+  }
+
+  // ---------- Fő ciklus ----------
+  function loop(t){
+    if(!running) return;
+    requestAnimationFrame(loop);
+    if(paused){ lastT=t; return; }
+    const dt = Math.min(.05,(t-lastT)/1000||0); lastT=t;
+
+    // nehezedés
+    fallSpeed += dt*4.5*P.speed;
+    spawnGap = Math.max(520, spawnGap - dt*28);
+    spawnT -= dt*1000;
+    if(spawnT<=0){ spawn(); spawnT=spawnGap; }
+
+    ctx.clearRect(0,0,W,H);
+
+    // kockák
+    const py=H-38;
+    for(let i=bricks.length-1;i>=0;i--){
+      const b=bricks[i];
+      b.y += b.v*dt; b.wob += dt*3;
+      const angle = Math.sin(b.wob)*.12;
+      drawBrick(b.x,b.y,b.w,b.h,b.c,angle);
+      // elkapás
+      if(b.y+b.h/2 >= py && b.y+b.h/2 <= py+26 &&
+         Math.abs(b.x-paddle.x) < paddle.w/2 + b.w/2 - 6){
+        const pts = (b.gold?50:10)*combo;
+        score += pts; combo = Math.min(9, combo+ (b.gold?2:1) - (combo>=9?0:0));
+        if(combo>9) combo=9;
+        burst(b.x,py,b.c);
+        beep(b.gold?880:440+combo*40, .1, b.gold?'triangle':'square');
+        bricks.splice(i,1); updateHUD();
+        parent.postMessage({source:'kockavadasz', event:'score', score}, '*');
+        continue;
+      }
+      // elejtés
+      if(b.y-b.h/2 > H){
+        bricks.splice(i,1);
+        combo=1; lives--;
+        beep(140,.25,'sawtooth',.2);
+        updateHUD();
+        if(lives<=0){ gameOver(); return; }
+      }
+    }
+
+    // részecskék
+    for(let i=parts.length-1;i>=0;i--){
+      const p=parts[i];
+      p.life-=dt; if(p.life<=0){parts.splice(i,1);continue;}
+      p.vy+=600*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
+      ctx.globalAlpha=Math.max(0,p.life/.55);
+      ctx.fillStyle=p.c;
+      ctx.fillRect(p.x,p.y,p.s,p.s);
+      ctx.globalAlpha=1;
+    }
+
+    drawPaddle();
+  }
+
+  // ---------- Irányítás ----------
+  function movePaddle(clientX){
+    const r=cv.getBoundingClientRect();
+    paddle.x=Math.min(W-paddle.w/2,Math.max(paddle.w/2,clientX-r.left));
+  }
+  cv.addEventListener('pointermove',e=>{ if(running&&!paused) movePaddle(e.clientX); });
+  cv.addEventListener('pointerdown',e=>{ if(running&&!paused) movePaddle(e.clientX); });
+  cv.addEventListener('touchmove',e=>{ e.preventDefault(); if(running&&!paused) movePaddle(e.touches[0].clientX); },{passive:false});
+
+  const keys={};
+  window.addEventListener('keydown',e=>{
+    if(e.code==='Space'&&running){ e.preventDefault(); togglePause(); }
+    keys[e.code]=true;
+  });
+  window.addEventListener('keyup',e=>keys[e.code]=false);
+  setInterval(()=>{
+    if(!running||paused) return;
+    const s=W*.012;
+    if(keys.ArrowLeft) paddle.x=Math.max(paddle.w/2,paddle.x-s);
+    if(keys.ArrowRight) paddle.x=Math.min(W-paddle.w/2,paddle.x+s);
+  },16);
+
+  // ---------- Képernyők ----------
+  function start(){
+    reset();
+    $('startScreen').classList.add('hidden');
+    $('overScreen').classList.add('hidden');
+    running=true; paused=false; lastT=performance.now();
+    beep(523,.08); setTimeout(()=>beep(659,.08),90); setTimeout(()=>beep(784,.12),180);
+    requestAnimationFrame(loop);
+    parent.postMessage({source:'kockavadasz', event:'start'}, '*');
+  }
+  function gameOver(){
+    running=false;
+    best=Math.max(best,score);
+    $('finalScore').textContent=score+' pont';
+    $('bestLine').textContent='Legjobb eredményed ebben a munkamenetben: '+best+' pont';
+    $('overScreen').classList.remove('hidden');
+    beep(330,.15); setTimeout(()=>beep(262,.15),150); setTimeout(()=>beep(196,.3),300);
+    parent.postMessage({source:'kockavadasz', event:'gameover', score, best}, '*');
+  }
+  function togglePause(){
+    paused=!paused;
+    $('pauseScreen').classList.toggle('hidden',!paused);
+  }
+
+  $('startBtn').addEventListener('click',start);
+  $('againBtn').addEventListener('click',start);
+  $('resumeBtn').addEventListener('click',togglePause);
+})();
+</script>
+</body>
+</html>
